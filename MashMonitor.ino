@@ -15,6 +15,8 @@ RotaryEncoder encoder(A2, A3);
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include <EEPROM.h>
+
 /*                   1111111111
            01234567890123456789
            Boiler 1   Boiler 2
@@ -50,8 +52,8 @@ float b1Temp;
 float b2Temp;
 
 int inputs[14] = {
-  67,        0,           1,            0,            0,              0,
-  80,        0,           1,            0,            0,              0,               0,     0
+  80,        0,           1,            0,            0,              0,
+  67,        0,           1,            0,            0,              0,               0,     0
 }; //default values
 
 enum inputMode {
@@ -60,13 +62,13 @@ enum inputMode {
 };
 
 int maxLimit[] = {
-  100,       999,         10,           9,            9,              999,
-  100,       999,         10,           9,            9,              999,             100,   7
+  100,       9999,        10,           9,            9,              9999,
+  100,       9999,        10,           9,            9,              9999,            100,   7
 };
 
 int minLimit[] = {
-  0,         -999,         0,          -9,            -999,          -999,
-  0,         -999,         0,          -9,            -999,          -999,               0,   0
+  0,         -9999,        0,          -9,            -9999,         -9999,
+  0,         -9999,        0,          -9,            -9999,         -9999,              0,   0
 };
 
 int currentInput = MODE;
@@ -76,19 +78,19 @@ boolean switchedToBoiler2 = false;
 const byte X = 0;
 const byte Y = 1;
 int inputPosn[14][2] = { {0, 1}, //B1 Target
-  {0, 1}, //B1 Target_D
-  {0, 2}, //B1 Tolerance
-  {0, 2}, //B1 Calibrate
-  {0, 2}, //B1 Tolerace_D
-  {0, 2}, //B1 Calibrate_D
+  {0, 1},  //B1 Target_D
+  {0, 2},  //B1 Tolerance
+  {0, 2},  //B1 Calibrate
+  {0, 2},  //B1 Tolerace_D
+  {0, 2},  //B1 Calibrate_D
   {10, 1}, //B2 Target
   {10, 1}, //B2 Target_D
   {10, 2}, //B2 Tolerance
   {10, 2}, //B2 Calibrate
   {10, 2}, //B2 Tolerance_D
   {10, 2}, //B2 Calibrate_D
-  {0, 3}, //Power
-  {7, 3}  //Mode
+  {0, 3},  //Power
+  {7, 3}   //Mode
 };
 
 #define U_LEFT 0  //unitsLeft
@@ -130,6 +132,11 @@ const String modes[] = {"       Off",
                         " Calibrate"
                        };
 
+const int CALIBRATE1_EEPROM_POSN = 0;
+const int CALIBRATE1D_EEPROM_POSN = 4;
+const int CALIBRATE2_EEPROM_POSN = 8;
+const int CALIBRATE2D_EEPROM_POSN = 12;
+
 void setup() {
   Serial.begin(115200);  // Serial connection from ESP-01 via 3.3v console cable
   Serial.print("\n\r \n\r Started...");
@@ -156,6 +163,35 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(backPin), backPressed, LOW);
   pinMode(powerPin, OUTPUT);
   pinMode(boilerSelectPin, OUTPUT);
+
+
+
+  EEPROM.get(CALIBRATE1_EEPROM_POSN, inputs[B1_CALIBRATE]);
+   if(inputs[B1_CALIBRATE] == NAN){
+    inputs[B1_CALIBRATE] = 0;
+  }
+
+  EEPROM.get(CALIBRATE1D_EEPROM_POSN, inputs[B1_CALIBRATE_D]);
+   if(inputs[B1_CALIBRATE_D] == NAN){
+    inputs[B1_CALIBRATE_D] = 0;
+  }
+
+  EEPROM.get(CALIBRATE2_EEPROM_POSN, inputs[B2_CALIBRATE]);
+   if(inputs[B2_CALIBRATE] == NAN){
+    inputs[B2_CALIBRATE] = 0;
+  }
+
+  EEPROM.get(CALIBRATE2D_EEPROM_POSN, inputs[B2_CALIBRATE_D]);
+   if(inputs[B2_CALIBRATE_D] == NAN){
+    inputs[B2_CALIBRATE_D] = 0;
+  }
+}
+
+void writeConfig(){
+    EEPROM.update(CALIBRATE1_EEPROM_POSN, inputs[B1_CALIBRATE]);
+    EEPROM.update(CALIBRATE1D_EEPROM_POSN, inputs[B1_CALIBRATE_D]);
+    EEPROM.update(CALIBRATE2_EEPROM_POSN, inputs[B2_CALIBRATE]);
+    EEPROM.update(CALIBRATE2D_EEPROM_POSN, inputs[B2_CALIBRATE_D]);
 }
 
 
@@ -178,7 +214,7 @@ void buttonPressed(byte endOfList, byte startOfList, byte nextItem, int incDec) 
       currentInput = nextItem;
     }
 
-    //Skip past Tolerance settings, if we're calibrating
+    //Skip past Tolerance settings, if we're calibrating (Using one field for two purposes)
     if ( ((currentInput == B1_TOLERANCE)   || (currentInput == B2_TOLERANCE) ||
           (currentInput == B1_TOLERANCE_D) || (currentInput == B2_TOLERANCE_D) )
          && (inputs[MODE] == CALIBRATE)
@@ -186,7 +222,7 @@ void buttonPressed(byte endOfList, byte startOfList, byte nextItem, int incDec) 
       currentInput += incDec;
     }
 
-    //Skip past Calibration settings, if we're not calibrating
+    //Skip past Calibration settings, if we're not calibrating (Using one field for two purposes)
     if ( ((currentInput == B1_CALIBRATE)   || (currentInput == B2_CALIBRATE) ||
           (currentInput == B1_CALIBRATE_D) || (currentInput == B2_CALIBRATE_D) )
          && (inputs[MODE] != CALIBRATE)
@@ -226,6 +262,12 @@ void checkInputs() {
   //rotary encoder moved
   int readPos = encoder.getPosition();
   if (inputs[currentInput] != readPos) {
+
+    if((inputs[currentInput] == CALIBRATE)&&(readPos < CALIBRATE)){
+      Serial.println("Writing to EEprom!");
+      writeConfig();
+    }
+
     lastPostpone = millis(); // pause monitoring, while input is happening
     if ((readPos <= maxLimit[currentInput]) && (readPos >= minLimit[currentInput])) {
       inputs[currentInput] = readPos;
