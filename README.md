@@ -23,3 +23,5 @@ Can control power to two electric boilers. As boilers are usually both > 2KW, th
 7. Auto control temperature in both liquor tank and mash tun, with mash tun as the priority.
 8. Set temperature calibration.
 
+
+![Mash Monitor Schematic](/bullimog/MashMonitor/blob/master/MashMonitor-Diag.png)
