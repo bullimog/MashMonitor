@@ -14,12 +14,12 @@ Can control power to two electric boilers. As boilers are usually both > 2KW, th
 
 
 ## Application has eight modes:
-l. Off
-l. Manually control power to liquor tank.
-l. Manually control power to mash tun.
-l. Auto control temperature in liquor tank.
-l. Auto control temperature in mash tun.
-l. Auto control temperature in both liquor tank and mash tun, with liquor tank as the priority.
-l. Auto control temperature in both liquor tank and mash tun, with mash tun as the priority.
-l. Set temperature calibration.
+1. Off
+2. Manually control power to liquor tank.
+3. Manually control power to mash tun.
+4. Auto control temperature in liquor tank.
+5. Auto control temperature in mash tun.
+6. Auto control temperature in both liquor tank and mash tun, with liquor tank as the priority.
+7. Auto control temperature in both liquor tank and mash tun, with mash tun as the priority.
+8. Set temperature calibration.
 
