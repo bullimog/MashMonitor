@@ -17,13 +17,13 @@ RotaryEncoder encoder(A2, A3);
 
 #include <EEPROM.h>
 
-/*                   1111111111
-           01234567890123456789
-           Boiler 1   Boiler 2
-  Current     68.4˚C *  144.9˚C *    Current
-  Target     100.0˚C <<  43.9˚C <-   Target
-  Tolerance    0.5˚C <-   0.5˚C <-   Tolerance
-  Output     100% <-  Priority1 <-   Mode
+/*                               1111111111
+                       01234567890123456789
+                       Boiler 1   Boiler 2
+  Current               68.4˚C *  144.9˚C *    Current
+  Target               100.0˚C <<  43.9˚C <-   Target
+  Tolerance/Calibrate    0.5˚C <-   0.5˚C <-   Tolerance/Calibrate
+  Output               100% <-  Priority1 <-   Mode
 */
 
 #define ONE_WIRE_BUS 5 //
@@ -33,16 +33,16 @@ DeviceAddress b1Probe = { 0x28, 0xFF, 0xFC, 0x69, 0x22, 0x17, 0x03, 0x77 };
 DeviceAddress b2Probe = { 0x28, 0xFF, 0x01, 0x6F, 0x22, 0x17, 0x03, 0x34 };
 
 const char degree = (char)223;
-const byte backPin = 3;  //back button
-const byte selectPin = 2;  //next button
-const byte powerPin = 9;   //AC triac | 488 Hz PWM
-const byte boilerSelectPin = 4; //relay
+const byte backPin = 3;         // back button
+const byte selectPin = 2;       // next button
+const byte powerPin = 9;        // AC triac | 488 Hz PWM
+const byte boilerSelectPin = 4; // relay
 
 
 const unsigned long selectDuration =  300; //ms between counting button presses
 unsigned long lastSelect = 0;
 
-const unsigned long postponeDuration =  500; //ms after input, before monitoring resumes
+const unsigned long postponeDuration =  1000; //ms after input, before monitoring resumes
 unsigned long lastPostpone = 0;
 
 const unsigned long monitorDuration =  2000; // ms between temperature updates
@@ -62,8 +62,8 @@ enum inputMode {
 };
 
 int maxLimit[] = {
-  100,       9999,        10,           9,            9,              9999,
-  100,       9999,        10,           9,            9,              9999,            100,   7
+  100,       9999,        10,           9,            9999,           9999,
+  100,       9999,        10,           9,            9999,           9999,            100,   7
 };
 
 int minLimit[] = {
@@ -133,12 +133,12 @@ const String modes[] = {"       Off",
                        };
 
 const int CALIBRATE1_EEPROM_POSN = 0;
-const int CALIBRATE1D_EEPROM_POSN = 4;
-const int CALIBRATE2_EEPROM_POSN = 8;
-const int CALIBRATE2D_EEPROM_POSN = 12;
+const int CALIBRATE1D_EEPROM_POSN = 2;
+const int CALIBRATE2_EEPROM_POSN = 4;
+const int CALIBRATE2D_EEPROM_POSN = 6;
 
 void setup() {
-  Serial.begin(115200);  // Serial connection from ESP-01 via 3.3v console cable
+  Serial.begin(115200); 
   Serial.print("\n\r \n\r Started...");
 
   // put your setup code here, to run once:
@@ -164,34 +164,37 @@ void setup() {
   pinMode(powerPin, OUTPUT);
   pinMode(boilerSelectPin, OUTPUT);
 
+  inputs[B1_CALIBRATE] =   getEEPROMInt(CALIBRATE1_EEPROM_POSN);
+  inputs[B1_CALIBRATE_D] = getEEPROMInt(CALIBRATE1D_EEPROM_POSN);
+  inputs[B2_CALIBRATE] =   getEEPROMInt(CALIBRATE2_EEPROM_POSN);
+  inputs[B2_CALIBRATE_D] = getEEPROMInt(CALIBRATE2D_EEPROM_POSN);
 
+}
 
-  EEPROM.get(CALIBRATE1_EEPROM_POSN, inputs[B1_CALIBRATE]);
-   if(inputs[B1_CALIBRATE] == NAN){
-    inputs[B1_CALIBRATE] = 0;
+int getEEPROMInt(int posn){
+  int _value;
+  EEPROM.get(posn, _value);
+   if(_value == NAN){
+    _value = 0;
   }
 
-  EEPROM.get(CALIBRATE1D_EEPROM_POSN, inputs[B1_CALIBRATE_D]);
-   if(inputs[B1_CALIBRATE_D] == NAN){
-    inputs[B1_CALIBRATE_D] = 0;
+  return _value;
+}
+
+void updateEEPROMInt(int posn, int _value){
+  int val = getEEPROMInt(posn);
+  if(val != _value){
+    EEPROM.put(posn, _value);
+    Serial.println("Written!!");
   }
 
-  EEPROM.get(CALIBRATE2_EEPROM_POSN, inputs[B2_CALIBRATE]);
-   if(inputs[B2_CALIBRATE] == NAN){
-    inputs[B2_CALIBRATE] = 0;
-  }
-
-  EEPROM.get(CALIBRATE2D_EEPROM_POSN, inputs[B2_CALIBRATE_D]);
-   if(inputs[B2_CALIBRATE_D] == NAN){
-    inputs[B2_CALIBRATE_D] = 0;
-  }
 }
 
 void writeConfig(){
-    EEPROM.update(CALIBRATE1_EEPROM_POSN, inputs[B1_CALIBRATE]);
-    EEPROM.update(CALIBRATE1D_EEPROM_POSN, inputs[B1_CALIBRATE_D]);
-    EEPROM.update(CALIBRATE2_EEPROM_POSN, inputs[B2_CALIBRATE]);
-    EEPROM.update(CALIBRATE2D_EEPROM_POSN, inputs[B2_CALIBRATE_D]);
+  updateEEPROMInt(CALIBRATE1_EEPROM_POSN, inputs[B1_CALIBRATE]);
+  updateEEPROMInt(CALIBRATE1D_EEPROM_POSN, inputs[B1_CALIBRATE_D]);
+  updateEEPROMInt(CALIBRATE2_EEPROM_POSN, inputs[B2_CALIBRATE]);
+  updateEEPROMInt(CALIBRATE2D_EEPROM_POSN, inputs[B2_CALIBRATE_D]);
 }
 
 
@@ -215,10 +218,14 @@ void buttonPressed(byte endOfList, byte startOfList, byte nextItem, int incDec) 
     }
 
     //Skip past Tolerance settings, if we're calibrating (Using one field for two purposes)
-    if ( ((currentInput == B1_TOLERANCE)   || (currentInput == B2_TOLERANCE) ||
-          (currentInput == B1_TOLERANCE_D) || (currentInput == B2_TOLERANCE_D) )
+    while ( ( (currentInput == B1_TOLERANCE)  || (currentInput == B2_TOLERANCE)   ||
+              (currentInput == B1_TOLERANCE_D) || (currentInput == B2_TOLERANCE_D) ||
+              (currentInput == B1_TARGET)   || (currentInput == B1_TARGET_D) ||
+              (currentInput == B2_TARGET)   || (currentInput == B2_TARGET_D) ||
+              (currentInput == POWER)
+            )
          && (inputs[MODE] == CALIBRATE)
-       ) {
+    ){
       currentInput += incDec;
     }
 
@@ -226,6 +233,14 @@ void buttonPressed(byte endOfList, byte startOfList, byte nextItem, int incDec) 
     if ( ((currentInput == B1_CALIBRATE)   || (currentInput == B2_CALIBRATE) ||
           (currentInput == B1_CALIBRATE_D) || (currentInput == B2_CALIBRATE_D) )
          && (inputs[MODE] != CALIBRATE)
+       ) {
+      currentInput +=incDec;
+    }
+
+    //Skip past Power setting, if we're not in manual mode
+    if ( (currentInput == POWER)   &&
+         (inputs[MODE] != MANUAL1) && 
+         (inputs[MODE] != MANUAL2)
        ) {
       currentInput +=incDec;
     }
@@ -264,7 +279,6 @@ void checkInputs() {
   if (inputs[currentInput] != readPos) {
 
     if((inputs[currentInput] == CALIBRATE)&&(readPos < CALIBRATE)){
-      Serial.println("Writing to EEprom!");
       writeConfig();
     }
 
@@ -345,24 +359,10 @@ void monitorMash() {
         setManual(true);
         break;
       case PRIORITY1:
-        priorityMonitor( b1Temp,
-                         assembleFloat(inputs[B1_TARGET], inputs[B1_TARGET_D], 100.0),
-                         assembleFloat(inputs[B1_TOLERANCE], inputs[B1_TOLERANCE_D], 100.0),
-                         false,
-                         b2Temp,
-                         assembleFloat(inputs[B2_TARGET], inputs[B2_TARGET_D], 100.0),
-                         assembleFloat(inputs[B2_TOLERANCE], inputs[B2_TOLERANCE_D], 100.0),
-                         true);
+        priorityMonitor(false);
         break;
       case PRIORITY2:
-        priorityMonitor( b2Temp,
-                         assembleFloat(inputs[B2_TARGET], inputs[B2_TARGET_D], 100.0),
-                         assembleFloat(inputs[B2_TOLERANCE], inputs[B2_TOLERANCE_D], 100.0),
-                         true,
-                         b1Temp,
-                         assembleFloat(inputs[B1_TARGET], inputs[B1_TARGET_D], 100.0),
-                         assembleFloat(inputs[B1_TOLERANCE], inputs[B1_TOLERANCE_D], 100.0),
-                         false);
+        priorityMonitor(true);
         break;
       case CALIBRATE:
         setOff();
@@ -385,7 +385,7 @@ void setOff() {
 /***********************************************
     Auto Monitoring
  ***********************************************/
-void setAuto(boolean isBoiler2, float boilerTemp, float boilerTarget, float boilerTolerance) {
+int setAuto(boolean isBoiler2, float boilerTemp, float boilerTarget, float boilerTolerance) {
 
   digitalWrite(boilerSelectPin, isBoiler2);
   switchedToBoiler2 = isBoiler2;
@@ -400,6 +400,8 @@ void setAuto(boolean isBoiler2, float boilerTemp, float boilerTarget, float boil
   int power = min(255, factor * diff);
   inputs[POWER] = (float)power / 2.55;
   analogWrite(powerPin, power);
+
+  return power;
 }
 
 
@@ -417,42 +419,24 @@ void setManual(boolean divert) {
 /*(*********************************************
     Priority Monotoring
  ***********************************************/
-
-byte priorityPwr = 0;
-
-void priorityMonitor(float primeTemp,  float primeTarget,  float primeTolerance,  boolean primeDiverted,
-                     float secondTemp, float secondTarget, float secondTolerance, boolean secondDiverted) {
-
-
-  boolean primeUsingPower = compareTemp(primeTemp, primeTarget, primeTolerance, primeDiverted);
-
-  if (!primeUsingPower) {
-    compareTemp(secondTemp, secondTarget, secondTolerance, secondDiverted);
-  }
-
-  inputs[POWER] = ((float)priorityPwr) / 2.55;
-  digitalWrite(boilerSelectPin, switchedToBoiler2);
-  analogWrite(powerPin, priorityPwr);
-}
-
-boolean compareTemp(float temp, float target, float tolerance, boolean bDiverted) {
-  if (temp < target - tolerance) { //below tolerance
-    switchedToBoiler2 = bDiverted;
-    priorityPwr = 255;
-    return true;
-  }
-  else if (temp >= target) { //on or above target
-    priorityPwr = 0;
-    return false;
-  }
-  else { //in tolerance zone
-    if ((priorityPwr > 0) &&
-        (switchedToBoiler2 == bDiverted)) { //still heating
-      return true;
+void priorityMonitor(boolean primeDiverted){
+  int pwr = 0;
+  float b1Target = assembleFloat(inputs[B1_TARGET], inputs[B1_TARGET_D], 100.0);
+  float b1Tolerance = assembleFloat(inputs[B1_TOLERANCE], inputs[B1_TOLERANCE_D], 100.0);
+  float b2Target = assembleFloat(inputs[B2_TARGET], inputs[B2_TARGET_D], 100.0);
+  float b2Tolerance = assembleFloat(inputs[B2_TOLERANCE], inputs[B2_TOLERANCE_D], 100.0);
+  
+  if(primeDiverted){
+    pwr = setAuto(primeDiverted, b2Temp, b2Target, b2Tolerance);
+    if (pwr == 0){
+      setAuto(!primeDiverted, b1Temp, b1Target, b1Tolerance);
+    }
+  }else{
+    pwr = setAuto(primeDiverted, b1Temp, b1Target, b1Tolerance);
+    if (pwr == 0){
+      setAuto(!primeDiverted, b2Temp, b2Target, b2Tolerance);
     }
   }
-
-  return false;
 }
 
 
@@ -479,36 +463,50 @@ void clearArrows() {
 
 
 void printInputValues() {
-  printValue(inputPosn[B1_TARGET][X],
-             inputPosn[B1_TARGET][Y],
-             formatInputTemperature(inputs[B1_TARGET], inputs[B1_TARGET_D]));
+  if (inputs[MODE] == CALIBRATE) {
 
-  if (inputs[MODE] != CALIBRATE) {
+   String blank = "       ";
+   printValue(inputPosn[B1_CALIBRATE][X],
+               inputPosn[B1_CALIBRATE][Y],
+               formatInputTemperature(inputs[B1_CALIBRATE], inputs[B1_CALIBRATE_D]));
+
+   printValue(inputPosn[B2_CALIBRATE][X],
+               inputPosn[B2_CALIBRATE][Y],
+               formatInputTemperature(inputs[B2_CALIBRATE], inputs[B2_CALIBRATE_D]));
+
+
+    printValue(inputPosn[B1_TARGET][X],
+               inputPosn[B1_TARGET][Y],
+               blank);
+
+    printValue(inputPosn[POWER][X],
+               inputPosn[POWER][Y],
+               blank);
+
+    printValue(inputPosn[B2_TARGET][X],
+               inputPosn[B2_TARGET][Y],
+               blank);
+  
+  }else {
     printValue(inputPosn[B1_TOLERANCE][X],
                inputPosn[B1_TOLERANCE][Y],
                formatInputTemperature(inputs[B1_TOLERANCE], inputs[B1_TOLERANCE_D]));
-  } else {
-    printValue(inputPosn[B1_CALIBRATE][X],
-               inputPosn[B1_CALIBRATE][Y],
-               formatInputTemperature(inputs[B1_CALIBRATE], inputs[B1_CALIBRATE_D]));
-  }
 
-  printValue(inputPosn[POWER][X],
-             inputPosn[POWER][Y],
-             pad((String)inputs[POWER], 3) + "%");
-
-  printValue(inputPosn[B2_TARGET][X],
-             inputPosn[B2_TARGET][Y],
-             formatInputTemperature(inputs[B2_TARGET], inputs[B2_TARGET_D]));
-
-  if (inputs[MODE] != CALIBRATE) {
     printValue(inputPosn[B2_TOLERANCE][X],
                inputPosn[B2_TOLERANCE][Y],
                formatInputTemperature(inputs[B2_TOLERANCE], inputs[B2_TOLERANCE_D]));
-  } else {
-    printValue(inputPosn[B2_CALIBRATE][X],
-               inputPosn[B2_CALIBRATE][Y],
-               formatInputTemperature(inputs[B2_CALIBRATE], inputs[B2_CALIBRATE_D]));
+
+    printValue(inputPosn[B1_TARGET][X],
+               inputPosn[B1_TARGET][Y],
+               formatInputTemperature(inputs[B1_TARGET], inputs[B1_TARGET_D]));
+
+    printValue(inputPosn[POWER][X],
+               inputPosn[POWER][Y],
+               pad((String)inputs[POWER], 3) + "%");
+
+    printValue(inputPosn[B2_TARGET][X],
+               inputPosn[B2_TARGET][Y],
+               formatInputTemperature(inputs[B2_TARGET], inputs[B2_TARGET_D]));
   }
 
   printValue(inputPosn[MODE][X],
@@ -538,14 +536,8 @@ String formatMode(float m) {
 
 float assembleFloat(int units, int tenths, float maximum) {
   float result = (float)units;
-//  if( (units < 0.0 ) && (tenths < 0.0)){
-    result += (float)tenths / 10.0;
-//  }else{
-//    result -= (float)tenths / 10.0;
-//  }
-
-  result = min(result, maximum);
-  return result;
+  result += (float)tenths / 10.0;
+  return min(result, maximum);
 }
 
 String formatInputTemperature(int u, int t) {
