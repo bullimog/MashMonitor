@@ -564,7 +564,6 @@ String oneDecPlace(float reading) {
   int a = round(reading * 10);
   float b = a / 10.0;
   String str = (String)b;
-  //if(reading < 0){str = "-"+str;}
   return str.substring(0, str.length() - 1);
 }
 
